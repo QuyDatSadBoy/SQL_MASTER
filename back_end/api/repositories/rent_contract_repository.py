@@ -57,6 +57,21 @@ class RentContractRepository:
         async with get_pool().acquire() as conn:
             rows = await conn.fetch(query, company_id)
             return [dict(row) for row in rows]
+
+    async def get_by_company_with_office(self, company_id: int) -> List[Dict[str, Any]]:
+        """Get all contracts for a company, kèm tên và diện tích văn phòng."""
+        query = """
+            SELECT rc.id, rc.office_id, rc.company_id, rc.invoice_id,
+                   rc.from_date, rc.end_date, rc.signed_date, rc.rent_price, rc.status,
+                   o.name AS office_name, o.area AS office_area
+            FROM rent_contracts rc
+            JOIN offices o ON rc.office_id = o.id
+            WHERE rc.company_id = $1
+            ORDER BY rc.from_date DESC
+        """
+        async with get_pool().acquire() as conn:
+            rows = await conn.fetch(query, company_id)
+            return [dict(row) for row in rows]
     
     async def update(self, contract_id: int, contract_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Update a contract."""

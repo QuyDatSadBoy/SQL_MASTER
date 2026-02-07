@@ -83,141 +83,62 @@ class CompanyRepository:
     
     async def get_monthly_costs(self, company_id: int, month: int, year: int) -> Dict[str, Any]:
         """
-        Get company's monthly costs including rent and services.
-        
-        Returns:
-            Dict with rent_cost, service_costs (list), total_cost
+        Chi phí tháng của công ty (tiền thuê + dịch vụ) — gọi function PostgreSQL.
         """
-        # Get rent cost for the month
-        rent_query = """
-            SELECT 
-                SUM(rc.rent_price) as rent_cost,
-                SUM(o.area) as total_area
-            FROM rent_contracts rc
-            JOIN offices o ON rc.office_id = o.id
-            WHERE rc.company_id = $1
-            AND rc.status = 'active'
-            AND DATE_PART('year', rc.from_date) <= $2
-            AND DATE_PART('month', rc.from_date) <= $3
-            AND (rc.end_date IS NULL OR (
-                DATE_PART('year', rc.end_date) >= $2
-                AND DATE_PART('month', rc.end_date) >= $3
-            ))
-        """
-        
-        # Get monthly service costs
-        service_query = """
-            SELECT 
-                s.name as service_name,
-                SUM(cmu.price) as service_cost
-            FROM company_monthly_usages cmu
-            JOIN services s ON cmu.service_id = s.id
-            WHERE cmu.company_id = $1
-            AND DATE_PART('year', cmu.from_date) = $2
-            AND DATE_PART('month', cmu.from_date) = $3
-            GROUP BY s.id, s.name
-        """
-        
-        # Get daily service costs (parking, meals)
-        daily_query = """
-            SELECT 
-                s.name as service_name,
-                SUM(edu.price) as service_cost
-            FROM employee_daily_usages edu
-            JOIN company_employees ce ON edu.employee_id = ce.id
-            JOIN services s ON edu.service_id = s.id
-            WHERE ce.company_id = $1
-            AND DATE_PART('year', edu.usage_date) = $2
-            AND DATE_PART('month', edu.usage_date) = $3
-            GROUP BY s.id, s.name
-        """
-        
+        query = "SELECT * FROM get_company_monthly_costs($1, $2, $3)"
         async with get_pool().acquire() as conn:
-            rent_row = await conn.fetchrow(rent_query, company_id, year, month)
-            service_rows = await conn.fetch(service_query, company_id, year, month)
-            daily_rows = await conn.fetch(daily_query, company_id, year, month)
-            
-            rent_cost = rent_row["rent_cost"] or 0
-            total_area = rent_row["total_area"] or 0
-            
-            service_costs = [dict(row) for row in service_rows]
-            service_costs.extend([dict(row) for row in daily_rows])
-            
-            total_service_cost = sum(item["service_cost"] or 0 for item in service_costs)
-            total_cost = rent_cost + total_service_cost
-            
+            row = await conn.fetchrow(query, company_id, year, month)
+            if not row:
+                return {
+                    "company_id": company_id,
+                    "month": month,
+                    "year": year,
+                    "rent_cost": 0.0,
+                    "total_area": 0.0,
+                    "service_costs": [],
+                    "total_service_cost": 0.0,
+                    "total_cost": 0.0,
+                }
             return {
-                "company_id": company_id,
-                "month": month,
-                "year": year,
-                "rent_cost": float(rent_cost),
-                "total_area": float(total_area),
-                "service_costs": service_costs,
-                "total_service_cost": float(total_service_cost),
-                "total_cost": float(total_cost)
+                "company_id": row["company_id"],
+                "month": row["month"],
+                "year": row["year"],
+                "rent_cost": float(row["rent_cost"] or 0),
+                "total_area": float(row["total_area"] or 0),
+                "service_costs": row["service_costs"] or [],
+                "total_service_cost": float(row["total_service_cost"] or 0),
+                "total_cost": float(row["total_cost"] or 0),
             }
     
     async def get_service_details(self, company_id: int, month: int, year: int) -> dict:
-        """Get detailed service usage and costs for a company."""
+        """Chi tiết dịch vụ công ty theo tháng — gọi function PostgreSQL."""
+        query = "SELECT * FROM get_company_service_details($1, $2, $3)"
         async with get_pool().acquire() as conn:
-            # Get company name
-            company_row = await conn.fetchrow("SELECT name FROM companies WHERE id = $1", company_id)
-            company_name = company_row['name'] if company_row else f"Company {company_id}"
-            
-            # Monthly services
-            monthly_rows = await conn.fetch("""
-                SELECT 
-                    s.name as service_name,
-                    cmu.quantity,
-                    cmu.price,
-                    (cmu.quantity * cmu.price) as total_cost
-                FROM company_monthly_usages cmu
-                JOIN services s ON cmu.service_id = s.id
-                WHERE cmu.company_id = $1
-                AND EXTRACT(YEAR FROM cmu.from_date) = $2
-                AND EXTRACT(MONTH FROM cmu.from_date) = $3
-            """, company_id, year, month)
-            
-            # Daily services
-            daily_rows = await conn.fetch("""
-                SELECT 
-                    ce.full_name as employee_name,
-                    s.name as service_name,
-                    edu.usage_date,
-                    edu.price
-                FROM employee_daily_usages edu
-                JOIN company_employees ce ON edu.employee_id = ce.id
-                JOIN services s ON edu.service_id = s.id
-                WHERE ce.company_id = $1
-                AND EXTRACT(YEAR FROM edu.usage_date) = $2
-                AND EXTRACT(MONTH FROM edu.usage_date) = $3
-            """, company_id, year, month)
-            
-            monthly_total = sum(float(row['total_cost']) for row in monthly_rows)
-            daily_total = sum(float(row['price']) for row in daily_rows)
-            
+            row = await conn.fetchrow(query, company_id, year, month)
+            if not row:
+                return {
+                    "company_id": company_id,
+                    "company_name": "",
+                    "month": month,
+                    "year": year,
+                    "monthly_services": [],
+                    "daily_services": [],
+                    "total_service_cost": 0.0,
+                }
+            monthly = row["monthly_services"] or []
+            daily = row["daily_services"] or []
+            if isinstance(daily, list):
+                for d in daily:
+                    if isinstance(d, dict) and "usage_date" in d:
+                        ud = d["usage_date"]
+                        if hasattr(ud, "isoformat"):
+                            d["usage_date"] = ud.isoformat()
             return {
-                "company_id": company_id,
-                "company_name": company_name,
-                "month": month,
-                "year": year,
-                "monthly_services": [
-                    {
-                        "service_name": row["service_name"],
-                        "quantity": float(row["quantity"]),
-                        "unit_price": float(row["price"]),
-                        "total_cost": float(row["total_cost"])
-                    }
-                    for row in monthly_rows
-                ],
-                "daily_services": [
-                    {
-                        "employee_name": row["employee_name"],
-                        "service_name": row["service_name"],
-                        "usage_date": row["usage_date"].isoformat(),
-                        "price": float(row["price"])
-                    }
-                    for row in daily_rows
-                ],
-                "total_service_cost": monthly_total + daily_total
+                "company_id": row["company_id"],
+                "company_name": row["company_name"] or "",
+                "month": row["month"],
+                "year": row["year"],
+                "monthly_services": monthly,
+                "daily_services": daily,
+                "total_service_cost": float(row["total_service_cost"] or 0),
             }

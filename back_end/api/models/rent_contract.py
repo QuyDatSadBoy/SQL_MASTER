@@ -39,5 +39,13 @@ class RentContractUpdate(BaseModel):
 class RentContract(RentContractBase):
     """Schema for RentContract response."""
     id: int
-    
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RentContractWithOffice(RentContract):
+    """Schema for RentContract response kèm thông tin văn phòng (dùng cho chi tiết chi phí)."""
+    office_name: Optional[str] = Field(None, description="Tên văn phòng")
+    office_area: Optional[Decimal] = Field(None, description="Diện tích văn phòng (m²)")
+
     model_config = ConfigDict(from_attributes=True)

@@ -4,7 +4,7 @@ Contains business logic.
 """
 from typing import List
 from fastapi import HTTPException
-from api.models.rent_contract import RentContract, RentContractCreate, RentContractUpdate
+from api.models.rent_contract import RentContract, RentContractCreate, RentContractUpdate, RentContractWithOffice
 from api.repositories.rent_contract_repository import RentContractRepository
 from api.repositories.office_repository import OfficeRepository
 from api.repositories.company_repository import CompanyRepository
@@ -63,6 +63,14 @@ class RentContractService:
         """Get all contracts for a company."""
         contracts = await self.repository.get_by_company(company_id)
         return [RentContract(**contract) for contract in contracts]
+
+    async def get_contracts_by_company_with_office(self, company_id: int) -> List[RentContractWithOffice]:
+        """Get all contracts for a company, kèm tên và diện tích văn phòng."""
+        company = await self.company_repository.get_by_id(company_id)
+        if not company:
+            raise HTTPException(status_code=404, detail="Công ty không tồn tại")
+        contracts = await self.repository.get_by_company_with_office(company_id)
+        return [RentContractWithOffice(**c) for c in contracts]
     
     async def update_contract(self, contract_id: int, contract: RentContractUpdate) -> RentContract:
         """Update a contract."""

@@ -3,7 +3,7 @@ Routes for RentContract endpoints.
 """
 from typing import List
 from fastapi import APIRouter, Query
-from api.models.rent_contract import RentContract, RentContractCreate, RentContractUpdate
+from api.models.rent_contract import RentContract, RentContractCreate, RentContractUpdate, RentContractWithOffice
 from api.services.rent_contract_service import RentContractService
 
 router = APIRouter(prefix="/contracts", tags=["Rent Contracts"])
@@ -31,10 +31,10 @@ async def list_contracts(
     return await service.list_contracts(skip, limit)
 
 
-@router.get("/company/{company_id}", response_model=List[RentContract])
+@router.get("/company/{company_id}", response_model=List[RentContractWithOffice])
 async def get_contracts_by_company(company_id: int):
-    """Lấy tất cả hợp đồng của một công ty."""
-    return await service.get_contracts_by_company(company_id)
+    """Lấy tất cả hợp đồng của một công ty (kèm tên và diện tích văn phòng)."""
+    return await service.get_contracts_by_company_with_office(company_id)
 
 
 @router.put("/{contract_id}", response_model=RentContract)

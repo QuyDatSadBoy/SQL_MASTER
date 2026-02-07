@@ -85,32 +85,10 @@ class BuildingEmployeeRepository:
     
     async def get_salaries(self, month: int, year: int) -> List[Dict[str, Any]]:
         """
-        Calculate salaries for building employees for a specific month.
-        Salary = base_salary + (revenue * bonus_rate)
+        Lấy lương nhân viên tòa nhà theo tháng bằng function PostgreSQL.
+        Lương = base_salary + sum(doanh thu dịch vụ × bonus_rate).
         """
-        query = """
-            SELECT 
-                be.employee_id,
-                CONCAT(be.first_name, ' ', be.last_name) as full_name,
-                be.role,
-                be.base_salary,
-                COALESCE(sr.bonus_rate, 0) as bonus_rate,
-                COALESCE(SUM(cmu.price), 0) as monthly_revenue,
-                be.base_salary + (COALESCE(SUM(cmu.price), 0) * COALESCE(sr.bonus_rate, 0)) as total_salary
-            FROM building_employees be
-            LEFT JOIN service_subscribers ss ON be.employee_id = ss.employee_id
-                AND ss.from_date <= MAKE_DATE($1, $2, 1) + INTERVAL '1 month' - INTERVAL '1 day'
-                AND (ss.end_date IS NULL OR ss.end_date >= MAKE_DATE($1, $2, 1))
-            LEFT JOIN service_role_rules srr ON ss.service_role_rules_id = srr.id
-            LEFT JOIN salary_rules sr ON srr.salary_rule_id = sr.id
-            LEFT JOIN company_monthly_usages cmu ON cmu.service_id = srr.service_id
-                AND EXTRACT(YEAR FROM cmu.from_date) = $1
-                AND EXTRACT(MONTH FROM cmu.from_date) = $2
-            GROUP BY be.employee_id, be.first_name, be.last_name, be.role, 
-                     be.base_salary, sr.bonus_rate
-            ORDER BY be.employee_id
-        """
-        
+        query = "SELECT * FROM get_building_employee_salaries($1, $2)"
         async with get_pool().acquire() as conn:
             rows = await conn.fetch(query, year, month)
             return [dict(row) for row in rows]
