@@ -29,6 +29,9 @@ export const companiesAPI = {
     api.get(`/companies/${companyId}/monthly-costs`, { params: { month, year } }),
   getServiceDetails: (id, month, year) =>
     api.get(`/companies/${id}/service-details`, { params: { month, year } }),
+  /** Chi tiết chi phí tháng: công ty + hợp đồng (kèm tên VP) + dịch vụ. Một request cho Costs modal. */
+  getCostDetail: (companyId, month, year) =>
+    api.get(`/companies/${companyId}/cost-detail`, { params: { month, year } }),
 };
 
 // Building Employees
@@ -41,6 +44,7 @@ export const employeesAPI = {
 // Contracts
 export const contractsAPI = {
   getAll: (params) => api.get('/contracts', { params }),
+  getByCompany: (companyId) => api.get(`/contracts/company/${companyId}`),
 };
 
 // Reports

@@ -223,13 +223,15 @@ class DatabaseUtils:
         print(f"✅ Database '{db_name}' dropped")
     
     async def reset_database(self):
-        """Drop and recreate current database."""
-        db_name = self.database
-        await self.close()
-        
-        # Drop and create
-        await self.drop_database(db_name)
-        await self.create_database(db_name)
+        """
+        Reset database: xóa toàn bộ đối tượng trong schema public (tables, functions, ...).
+        Không drop database nên vẫn chạy được khi có kết nối khác (vd: uvicorn).
+        Sau khi reset cần chạy run_migrations để tạo lại schema và data.
+        """
+        conn = await self.connect()
+        await conn.execute("DROP SCHEMA IF EXISTS public CASCADE")
+        await conn.execute("CREATE SCHEMA public")
+        await conn.execute("GRANT ALL ON SCHEMA public TO public")
     
     async def get_table_names(self) -> List[str]:
         """

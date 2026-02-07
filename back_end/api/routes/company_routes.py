@@ -43,6 +43,19 @@ async def delete_company(company_id: int):
     return await service.delete_company(company_id)
 
 
+@router.get("/{company_id}/cost-detail")
+async def get_cost_detail(
+    company_id: int,
+    month: int = Query(..., ge=1, le=12),
+    year: int = Query(..., ge=2000, le=2100),
+):
+    """
+    Chi tiết chi phí một công ty trong tháng: công ty, hợp đồng thuê (kèm tên văn phòng),
+    chi phí tháng, chi tiết dịch vụ (theo tháng + theo ngày). Một request cho trang Costs.
+    """
+    return await service.get_cost_detail(company_id, month, year)
+
+
 @router.get("/{company_id}/monthly-costs")
 async def get_monthly_costs(
     company_id: int,

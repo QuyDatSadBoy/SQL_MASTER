@@ -39,7 +39,9 @@ async def setup_database():
         migrations_dir = os.path.join(os.path.dirname(__file__), '../../migrations')
         migration_files = [
             '001_initial_schema.sql',
-            '002_sample_data.sql'
+            '002_sample_data.sql',
+            '003_building_employee_salary_function.sql',
+            '004_report_functions.sql',
         ]
         
         # Need to reconnect after creating database

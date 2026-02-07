@@ -1,7 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
 import { TrendingUp, TrendingDown, Calendar, FileText } from 'lucide-react';
 import { reportsAPI } from '../api/client';
-import { formatCurrency, getCurrentMonthYear } from '../utils/formatters';
+import { formatCurrency, formatDate, formatNumber, getCurrentMonthYear } from '../utils/formatters';
+
+/** Parse revenue_details / expense_details từ API (array hoặc JSON string). */
+function parseDetailsArray(val) {
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string') {
+    try {
+      const p = JSON.parse(val);
+      return Array.isArray(p) ? p : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
 
 const Reports = () => {
   const [report, setReport] = useState(null);
@@ -15,14 +29,19 @@ const Reports = () => {
   const fetchReport = useCallback(async () => {
     setLoading(true);
     try {
-      const [reportRes, detailsRes] = await Promise.all([
-        reportsAPI.getFinance(month, year),
-        reportsAPI.getFinanceDetails(month, year),
-      ]);
-      setReport(reportRes.data);
-      setDetails(detailsRes.data);
+      const reportRes = await reportsAPI.getFinance(month, year);
+      setReport(reportRes.data ?? null);
+      try {
+        const detailsRes = await reportsAPI.getFinanceDetails(month, year);
+        setDetails(detailsRes.data ?? { revenue_details: [], expense_details: [] });
+      } catch (detailsErr) {
+        console.error('Error fetching report details:', detailsErr);
+        setDetails({ revenue_details: [], expense_details: [] });
+      }
     } catch (error) {
       console.error('Error fetching report:', error);
+      setReport(null);
+      setDetails({ revenue_details: [], expense_details: [] });
       alert('Lỗi tải báo cáo tài chính');
     } finally {
       setLoading(false);
@@ -157,51 +176,105 @@ const Reports = () => {
       {/* Details Section */}
       {showDetails && (
         <div className="space-y-6">
-          {/* Revenue Details */}
+          {/* Chi tiết thu nhập (từng hóa đơn) */}
           <div className="bg-white rounded-2xl p-6 border border-purple-100 shadow-lg">
             <h3 className="text-xl font-bold text-green-600 mb-4">Chi tiết thu nhập</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-green-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-green-800">Công ty</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-green-800">Văn phòng</th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-green-800">Thuê VP</th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-green-800">DV Tháng</th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-green-800">DV Ngày</th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-green-800">Tổng thu</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-green-100">
-                  {details.revenue_details.map((detail, index) => (
-                    <tr key={index} className="hover:bg-green-50 transition-colors duration-200">
-                      <td className="px-4 py-3 text-sm text-text">{detail.company_name}</td>
-                      <td className="px-4 py-3 text-sm text-text/80">{detail.office_name}</td>
-                      <td className="px-4 py-3 text-sm text-right text-text">{formatCurrency(detail.rent_cost)}</td>
-                      <td className="px-4 py-3 text-sm text-right text-text">{formatCurrency(detail.monthly_service_cost)}</td>
-                      <td className="px-4 py-3 text-sm text-right text-text">{formatCurrency(detail.daily_service_cost)}</td>
-                      <td className="px-4 py-3 text-sm text-right font-medium text-green-600">
-                        {formatCurrency(detail.total_revenue)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {(() => {
+              const revenueList = parseDetailsArray(details.revenue_details);
+              if (!revenueList.length) {
+                return <p className="text-sm text-text/60">Không có hóa đơn thu trong tháng.</p>;
+              }
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-green-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-green-800">Công ty</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-green-800">MST</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-green-800">Từ ngày</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-green-800">Đến ngày</th>
+                        <th className="px-4 py-3 text-right text-sm font-medium text-green-800">Tổng tiền</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-green-800">Trạng thái</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-green-100">
+                      {revenueList.map((d, index) => (
+                        <tr key={d.invoice_id ?? index} className="hover:bg-green-50 transition-colors duration-200">
+                          <td className="px-4 py-3 text-sm text-text">{d.company_name ?? '—'}</td>
+                          <td className="px-4 py-3 text-sm text-text/80">{d.tax_code ?? '—'}</td>
+                          <td className="px-4 py-3 text-sm text-text/80">{d.from_date ? formatDate(d.from_date) : '—'}</td>
+                          <td className="px-4 py-3 text-sm text-text/80">{d.to_date ? formatDate(d.to_date) : '—'}</td>
+                          <td className="px-4 py-3 text-sm text-right font-medium text-green-600">
+                            {formatCurrency(d.total_amount)}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className={`px-2 py-0.5 rounded text-xs ${d.status === 'paid' ? 'bg-green-100 text-green-800' : d.status === 'overdue' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}>
+                              {d.status === 'paid' ? 'Đã thanh toán' : d.status === 'unpaid' ? 'Chưa thanh toán' : d.status === 'overdue' ? 'Quá hạn' : d.status ?? '—'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
 
-          {/* Expense Breakdown */}
+          {/* Chi tiết chi phí (từng nhân viên tòa nhà) */}
           <div className="bg-white rounded-2xl p-6 border border-purple-100 shadow-lg">
             <h3 className="text-xl font-bold text-red-600 mb-4">Chi tiết chi phí</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center p-4 bg-red-50 rounded-lg">
-                <span className="text-text font-medium">Tổng chi lương nhân viên</span>
-                <span className="text-lg font-bold text-red-600">{formatCurrency(report.total_expense)}</span>
-              </div>
-              <p className="text-sm text-text/60 px-4">
-                Bao gồm lương cơ bản và thưởng cho toàn bộ nhân viên quản lý tòa nhà
-              </p>
-            </div>
+            {(() => {
+              const expenseList = parseDetailsArray(details.expense_details);
+              if (!expenseList.length) {
+                return (
+                  <>
+                    <div className="flex justify-between items-center p-4 bg-red-50 rounded-lg">
+                      <span className="text-text font-medium">Tổng chi lương nhân viên</span>
+                      <span className="text-lg font-bold text-red-600">{formatCurrency(report.total_expense)}</span>
+                    </div>
+                    <p className="text-sm text-text/60 px-4 mt-2">Không có chi tiết từng nhân viên trong tháng.</p>
+                  </>
+                );
+              }
+              return (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center p-4 bg-red-50 rounded-lg">
+                    <span className="text-text font-medium">Tổng chi lương nhân viên</span>
+                    <span className="text-lg font-bold text-red-600">{formatCurrency(report.total_expense)}</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-red-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-red-800">Nhân viên</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-red-800">Chức vụ</th>
+                          <th className="px-4 py-3 text-right text-sm font-medium text-red-800">Lương cơ bản</th>
+                          <th className="px-4 py-3 text-right text-sm font-medium text-red-800">Tỷ lệ thưởng (%)</th>
+                          <th className="px-4 py-3 text-right text-sm font-medium text-red-800">Doanh thu DV</th>
+                          <th className="px-4 py-3 text-right text-sm font-medium text-red-800">Tổng lương</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-red-100">
+                        {expenseList.map((d, index) => (
+                          <tr key={d.employee_id ?? index} className="hover:bg-red-50/50 transition-colors duration-200">
+                            <td className="px-4 py-3 text-sm text-text font-medium">{d.full_name ?? '—'}</td>
+                            <td className="px-4 py-3 text-sm text-text/80">{d.position ?? d.role ?? '—'}</td>
+                            <td className="px-4 py-3 text-sm text-right text-text">{formatCurrency(d.base_salary)}</td>
+                            <td className="px-4 py-3 text-right text-text">{d.bonus_rate != null ? formatNumber(d.bonus_rate) : '—'}</td>
+                            <td className="px-4 py-3 text-sm text-right text-text">{formatCurrency(d.service_revenue)}</td>
+                            <td className="px-4 py-3 text-sm text-right font-medium text-red-600">{formatCurrency(d.total_salary)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-sm text-text/60 px-4">
+                    Bao gồm lương cơ bản và thưởng cho toàn bộ nhân viên quản lý tòa nhà
+                  </p>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

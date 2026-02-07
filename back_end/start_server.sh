@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 export POSTGRES_HOST=localhost
 export POSTGRES_PORT=5432
 export POSTGRES_USER=postgres
-export POSTGRES_PASSWORD=datsql09
+export POSTGRES_PASSWORD=1234
 export POSTGRES_DB=office_db
 
 echo "🚀 Starting FastAPI Server on port 8222..."
